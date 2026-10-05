@@ -1,0 +1,224 @@
+{VERSION 6 0 "IBM INTEL NT" "6.0" }
+{USTYLETAB {CSTYLE "Maple Input" -1 0 "Courier" 0 1 255 0 0 1 0 1 0 0 
+1 0 0 0 0 1 }{CSTYLE "2D Math" -1 2 "Times" 0 1 0 0 0 0 0 0 2 0 0 0 0 
+0 0 1 }{CSTYLE "2D Output" 2 20 "" 0 1 0 0 255 1 0 0 0 0 0 0 0 0 0 1 }
+{PSTYLE "Normal" -1 0 1 {CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 
+0 0 0 }0 0 0 -1 -1 -1 0 0 0 0 0 0 -1 0 }{PSTYLE "Maple Output" 0 11 1 
+{CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 }3 3 0 -1 -1 -1 0 
+0 0 0 0 0 -1 0 }}
+{SECT 0 {EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 14077 "# Appendix B.2: s
+elf-contained exact rational interval certificate.\n# No other program
+, data file, or previous assignment is required.\n# Statistic 1 = cran
+k; statistic 2 = rank.\n# All positivity decisions use exact rational \+
+arithmetic.\n\nAppendixB2 := module()\n    option package;\n\n    expo
+rt VerifyB2;\n\n    local G, Alpha, Beta, Ctab, Dtab, Rpow,\n         \+
+ Down, Up, AddI, MulI, NegI, SubI, ScaleI, DivI,\n          PowI, AbsM
+axI, ExpAt, Polynomials, HornerI,\n          EncloseCell, SectorS, Sec
+torV, CentralError, CheckCentral;\n\n    G := 10^30;\n    Alpha := [41
+/25, 33/20];\n    Beta := 13/10000;\n\n    Ctab := [2, 3, 8, 26, 106, \+
+533, 3134];\n    Dtab := [1/2, 5/12, 1/2, 1, 2, 6, 17];\n    Rpow := [
+1, 3/2, 2, 3, 4];\n\n    # Outward rounding to multiples of 10^(-30).
+\n\n    Down := proc(x::rational)\n        return floor(G*x)/G;\n    e
+nd proc;\n\n    Up := proc(x::rational)\n        return -floor(-G*x)/G
+;\n    end proc;\n\n    # Interval operations.\n    # An interval is r
+epresented by [lower endpoint, upper endpoint].\n\n    AddI := proc(A:
+:list, B::list)\n        return [\n            Down(A[1]+B[1]),\n     \+
+       Up(A[2]+B[2])\n        ];\n    end proc;\n\n    MulI := proc(A:
+:list, B::list)\n        local products;\n\n        products := [\n   \+
+         A[1]*B[1], A[1]*B[2],\n            A[2]*B[1], A[2]*B[2]\n    \+
+    ];\n\n        return [\n            Down(min(op(products))),\n    \+
+        Up(max(op(products)))\n        ];\n    end proc;\n\n    NegI :
+= proc(A::list)\n        return [-A[2], -A[1]];\n    end proc;\n\n    \+
+SubI := proc(A::list, B::list)\n        return AddI(A, NegI(B));\n    \+
+end proc;\n\n    ScaleI := proc(c::rational, A::list)\n        return \+
+MulI([c, c], A);\n    end proc;\n\n    DivI := proc(A::list, B::list)
+\n        if B[1] <= 0 and B[2] >= 0 then\n            error \"divisio
+n by an interval containing zero: %1\", B;\n        end if;\n\n       \+
+ return MulI(\n            A,\n            [Down(1/B[2]), Up(1/B[1])]
+\n        );\n    end proc;\n\n    PowI := proc(A::list, exponent::non
+negint)\n        local result, k;\n\n        result := [1, 1];\n\n    \+
+    for k from 1 to exponent do\n            result := MulI(result, A)
+;\n        end do;\n\n        return result;\n    end proc;\n\n    Abs
+MaxI := proc(A::list)\n        return max(abs(A[1]), abs(A[2]));\n    \+
+end proc;\n\n    # Rigorous exponential enclosure.\n    # Degree-24 Ta
+ylor sum and a geometric upper bound for the tail.\n\n    ExpAt := pro
+c(x::rational)\n        local term, total, r, tailUpper;\n\n        if
+ x < 0 or x > 13/5 or x/26 >= 1 then\n            error \"invalid expo
+nential argument: %1\", x;\n        end if;\n\n        term := 1;\n   \+
+     total := 1;\n\n        for r from 1 to 24 do\n            term :=
+ term*x/r;\n            total := total+term;\n        end do;\n\n     \+
+   tailUpper := (term*x/25)/(1-x/26);\n\n        return [\n           \+
+ Down(total),\n            Up(total+tailUpper)\n        ];\n    end pr
+oc;\n\n    # P_j(T) = v^(j)(w), where T = tanh(w/2).\n    # Coefficien
+ts are stored in ascending powers of T.\n    # Recurrence: P_(j+1) = (
+1-T^2)*P_j'/2.\n\n    Polynomials := proc()\n        local z, p, resul
+t, j, k;\n\n        result := Array(0..5, datatype=anything);\n       \+
+ p := (1-z^2)/4;\n\n        for j from 0 to 5 do\n            result[j
+] := [\n                seq(coeff(p, z, k), k=0..degree(p, z))\n      \+
+      ];\n\n            if j < 5 then\n                p := expand((1-
+z^2)*diff(p, z)/2);\n            end if;\n        end do;\n\n        r
+eturn result;\n    end proc;\n\n    # Horner evaluation with outward-r
+ounded interval operations.\n\n    HornerI := proc(coefficients::list,
+ X::list)\n        local result, k;\n\n        result := [0, 0];\n\n  \+
+      for k from nops(coefficients) by -1 to 1 do\n            result \+
+:= AddI(\n                MulI(result, X),\n                [coefficie
+nts[k], coefficients[k]]\n            );\n        end do;\n\n        r
+eturn result;\n    end proc;\n\n    # Construct fresh enclosures for o
+ne closed cell.\n    # Return [W_a, enclosure of T, derivative enclosu
+res].\n    # The third entry contains v^(0),...,v^(5), in this order.
+\n\n    EncloseCell := proc(cellIndex::nonnegint, polys)\n        loca
+l W, Eleft, Eright, Tint, V, j;\n\n        if cellIndex > 2599 then\n \+
+           error \"invalid cell index: %1\", cellIndex;\n        end i
+f;\n\n        W := [cellIndex/1000, (cellIndex+1)/1000];\n\n        El
+eft := ExpAt(W[1]);\n        Eright := ExpAt(W[2]);\n\n        if Elef
+t[1] < 1 or Eleft[1] > Eleft[2]\n           or Eright[1] < 1 or Eright
+[1] > Eright[2] then\n            error \"invalid exponential enclosur
+e at cell %1\",\n                  cellIndex;\n        end if;\n\n    \+
+    # Monotonicity gives an enclosure on the entire cell.\n\n        T
+int := [\n            Down((Eleft[1]-1)/(Eleft[1]+1)),\n            Up
+((Eright[2]-1)/(Eright[2]+1))\n        ];\n\n        if Tint[1] < 0 or
+ Tint[1] > Tint[2]\n           or Tint[2] >= 1 then\n            error
+ \"invalid tanh enclosure at cell %1\", cellIndex;\n        end if;\n
+\n        V := [\n            seq(HornerI(polys[j], Tint), j=0..5)\n  \+
+      ];\n\n        for j from 1 to 6 do\n            if not type(V[j]
+[1], rational)\n               or not type(V[j][2], rational)\n       \+
+        or V[j][1] > V[j][2] then\n                error \"invalid der
+ivative enclosure: cell %1, order %2\",\n                      cellInd
+ex, j-1;\n            end if;\n        end do;\n\n        if V[1][1] <
+= 0 then\n            error \"nonpositive lower bound for v at cell %1
+\",\n                  cellIndex;\n        end if;\n\n        return [
+W, Tint, V];\n    end proc;\n\n    # Weighted sector bounds.\n    # Ct
+ab[d] = C_d.\n    # Dtab[j+1] = D_j.\n    # Rpow[a+1] = mathfrak r_a.
+\n\n    SectorS := proc(d::posint, lowerW::rational)\n        local q;
+\n\n        if d > 7 or lowerW < 0 then\n            error \"invalid w
+eighted-sector arguments\";\n        end if;\n\n        q := 119/100+2
+7*lowerW/50;\n\n        return min(\n            Ctab[d],\n           \+
+ 2*factorial(d)*\n            (q^(-d-1)+5*q^(-d)/(12*d))\n        );\n
+    end proc;\n\n    SectorV := proc(j::nonnegint, lowerW::rational)\n
+        if j > 6 or lowerW < 0 then\n            error \"invalid deriv
+ative-sector arguments\";\n        end if;\n\n        return min(\n   \+
+         Dtab[j+1],\n            SectorS(j+1, lowerW)\n        );\n   \+
+ end proc;\n\n    # Upper bound for E_(statistic,j)(w) throughout W.\n
+    # absV[d+1] bounds |v^(d)(w)|, d = 0,...,5.\n\n    CentralError :=
+ proc(\n        j::nonnegint, W::list, absV::list, statistic::posint\n
+    )\n        local kappa, lam, shiftW, phi2, phiAbs, heat,\n        \+
+      phi, r, ell, coefficient, derivative,\n              transfer, g
+1, g2;\n\n        if j > 2 or (statistic <> 1 and statistic <> 2) then
+\n            error \"invalid central-error indices\";\n        end if
+;\n\n        kappa := j+1;\n        lam := (2*statistic-1)/2;\n\n     \+
+   if statistic = 1 then\n            shiftW := max(0, W[1]-Beta);\n  \+
+          phi2 := [1/3, 2/3, 1/2];\n            phiAbs := 1;\n        \+
+else\n            shiftW := W[1];\n            phi2 := [7/3, 8/3, 5/2]
+;\n            phiAbs := 3/2;\n        end if;\n\n        heat :=\n   \+
+         phi2[j+1]/2*SectorV(j+2, shiftW)\n            + lam*phiAbs*(
+\n                SectorV(j+3, shiftW)\n                + SectorV(j+2,
+ shiftW)\n              )\n            + lam^2/2*(\n                Se
+ctorS(kappa+4, shiftW)\n                + 2*SectorS(kappa+3, shiftW)\n
+                + SectorS(kappa+2, shiftW)\n              );\n\n      \+
+  phi := Array(1..4, fill=0, datatype=anything);\n\n        for r from
+ 1 to 4 do\n            for ell from 0 to min(r, kappa) do\n\n        \+
+        coefficient :=\n                    binomial(r, ell)*factorial
+(kappa)\n                    /factorial(kappa-ell);\n\n               \+
+ if r < 4 then\n                    derivative := absV[j+r-ell+1];\n  \+
+              else\n                    derivative :=\n               \+
+         Rpow[kappa-ell+1]\n                        *SectorV(j+r-ell, \+
+W[1]);\n                end if;\n\n                phi[r] := phi[r]\n \+
+                   + coefficient*W[2]^(r-ell)*derivative;\n           \+
+ end do;\n        end do;\n\n        transfer := phi[1]+phi[2]+phi[3]+
+phi[4]/8;\n\n        g1 := (kappa+1)*absV[j+3]+W[2]*absV[j+4];\n\n    \+
+    g2 := 0;\n\n        for ell from 0 to 2 do\n            coefficien
+t :=\n                binomial(2, ell)*factorial(kappa+1)\n           \+
+     /factorial(kappa+1-ell);\n\n            g2 := g2\n               \+
+ + coefficient*Rpow[kappa+2-ell]\n                  *W[2]^(2-ell)\n   \+
+               *SectorV(j+4-ell, W[1]);\n        end do;\n\n        # \+
+The +3 includes the minor arc and the correction\n        # for the no
+nunit major-arc mass.\n\n        return Up(\n            transfer+lam*
+(3*g1+g2)\n            +(2+10*Beta)*heat+3\n        );\n    end proc;
+\n\n    # Lower bound for mathscr L_statistic throughout W\n    # and \+
+the entire Alpha interval.\n\n    CheckCentral := proc(\n        W::li
+st, V::list, statistic::posint\n    )\n        local b, lam, twoAlpha,
+ eta, A, linear,\n              absV, absA, err, U, enclosure,\n      \+
+        linearLower, losses, loss, low, j;\n\n        if statistic <> \+
+1 and statistic <> 2 then\n            error \"invalid statistic index
+\";\n        end if;\n\n        b := Beta;\n        lam := (2*statisti
+c-1)/2;\n        twoAlpha := ScaleI(2, Alpha);\n\n        eta := AddI(
+\n            [lam, lam],\n            DivI(MulI(W, W), ScaleI(4, Alph
+a))\n        );\n\n        # A[1], A[2], A[3] enclose A_0, A_1, A_2.\n
+\n        A := [\n            SubI(\n                SubI(\n          \+
+          DivI(NegI(V[1]), Alpha),\n                    DivI(\n       \+
+                 MulI(ScaleI(3, W), V[2]),\n                        tw
+oAlpha\n                    )\n                ),\n                Mul
+I(eta, V[3])\n            ),\n\n            SubI(\n                Sub
+I(\n                    DivI(ScaleI(-5, V[2]), twoAlpha),\n           \+
+         DivI(\n                        MulI(ScaleI(2, W), V[3]),\n   \+
+                     Alpha\n                    )\n                ),
+\n                MulI(eta, V[4])\n            ),\n\n            SubI(
+\n                SubI(\n                    DivI(ScaleI(-9, V[3]), tw
+oAlpha),\n                    DivI(\n                        MulI(Scal
+eI(5, W), V[4]),\n                        twoAlpha\n                  \+
+  )\n                ),\n                MulI(eta, V[5])\n            \+
+)\n        ];\n\n        # C_statistic = 2*v'*A_1 - v*A_2 - v''*A_0.\n
+\n        linear := SubI(\n            SubI(\n                MulI(Sca
+leI(2, V[2]), A[2]),\n                MulI(V[1], A[3])\n            ),
+\n            MulI(V[3], A[1])\n        );\n\n        absV := [seq(Abs
+MaxI(V[j]), j=1..6)];\n        absA := [seq(AbsMaxI(A[j]), j=1..3)];\n
+\n        err := [\n            seq(CentralError(j, W, absV, statistic
+), j=0..2)\n        ];\n\n        U := [\n            seq(Up(absV[j]+b
+*absA[j]), j=1..3)\n        ];\n\n        # Lower enclosure of 2*v^3.
+\n\n        enclosure := ScaleI(\n            2,\n            PowI([V[
+1][1], V[1][1]], 3)\n        );\n\n        linearLower := b*min(linear
+[1], 0);\n\n        enclosure := AddI(\n            enclosure,\n      \+
+      [linearLower, linearLower]\n        );\n\n        # Upper bounds
+ for the subtracted nonnegative terms.\n\n        losses := [\n       \+
+     b^2*absA[1]*absA[3],\n\n            b^2*(\n                2*U[2]
+*err[2]\n                + U[1]*err[3]\n                + U[3]*err[1]
+\n            ),\n\n            b^4*(err[2]^2+err[1]*err[3]),\n\n     \+
+       b^2/4*(U[3]+b^2*err[3])^2\n        ];\n\n        for loss in lo
+sses do\n            enclosure := SubI(enclosure, [loss, loss]);\n    \+
+    end do;\n\n        low := enclosure[1];\n\n        if low <= 3/100
+00 then\n            error \"central bound failed: statistic %1, inter
+val %2, bound %3\",\n                  statistic, W, low;\n        end
+ if;\n\n        return low;\n    end proc;\n\n    VerifyB2 := proc()\n
+        local bounds, polys, minima, locations, counts,\n             \+
+ labels, expectedDigits, expectedMargins,\n              cellIndex, ce
+ll, W, V, statistic,\n              low, previous, digits;\n\n        \+
+bounds := Array(1..2, 0..2599, datatype=anything);\n        polys := P
+olynomials();\n\n        minima := Array(1..2, fill=1, datatype=anythi
+ng);\n        locations := Array(1..2, fill=-1, datatype=anything);\n \+
+       counts := Array(1..2, fill=0, datatype=anything);\n\n        la
+bels := [\"CRANK_PASS\", \"RANK_PASS\"];\n        expectedDigits := [4
+65010402, 407367051];\n        expectedMargins := [465/10^6, 407/10^6]
+;\n\n        previous := 0;\n\n        # Generate all required enclosu
+res internally.\n\n        for cellIndex from 0 to 2599 do\n          \+
+  cell := EncloseCell(cellIndex, polys);\n            W := cell[1];\n \+
+           V := cell[3];\n\n            if W[1] <> previous\n         \+
+      or W[2]-W[1] <> 1/1000 then\n                error \"B.2 coverag
+e failure at cell %1\", cellIndex;\n            end if;\n\n           \+
+ previous := W[2];\n\n            for statistic from 1 to 2 do\n      \+
+          low := CheckCentral(W, V, statistic);\n\n                bou
+nds[statistic, cellIndex] := low;\n\n                if low < minima[s
+tatistic] then\n                    minima[statistic] := low;\n       \+
+             locations[statistic] := cellIndex;\n                end i
+f;\n\n                counts[statistic] := counts[statistic]+1;\n     \+
+       end do;\n        end do;\n\n        if previous <> 13/5 or coun
+ts[1]+counts[2] <> 5200 then\n            error \"incomplete B.2 domai
+n coverage\";\n        end if;\n\n        for statistic from 1 to 2 do
+\n            if counts[statistic] <> 2600\n               or minima[s
+tatistic] <= expectedMargins[statistic] then\n                error \"
+incomplete coverage or insufficient central margin\";\n            end
+ if;\n\n            # Exact integer truncations are for reporting only
+.\n\n            digits := floor(10^12*minima[statistic]);\n\n        \+
+    if digits <> expectedDigits[statistic]\n               or location
+s[statistic] <> 2599 then\n                error \"recorded central mi
+nimum does not match\";\n            end if;\n\n            print([\n \+
+               labels[statistic],\n                counts[statistic],
+\n                digits,\n                locations[statistic]\n     \+
+       ]);\n        end do;\n\n        print([\"APPENDIX_B2_PASS\", co
+unts[1]+counts[2]]);\n\n        return bounds;\n    end proc;\n\nend m
+odule:\n\n# Run the independent B.2 certificate.\nAppendixB2Result := \+
+AppendixB2:-VerifyB2():" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#7&Q+CRANK_P
+ASS6\"\"%+E\"*-/,l%\"%*f#" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#7&Q*RANK_
+PASS6\"\"%+E\"*^qO2%\"%*f#" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#7$Q1APPE
+NDIX_B2_PASS6\"\"%+_" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 0 "" }}
+}}{MARK "1 0 0" 0 }{VIEWOPTS 1 1 0 1 1 1803 1 1 1 1 }{PAGENUMBERS 0 1 
+2 33 1 1 }
